@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Tutor de estudio</title>
+  <meta name="description" content="Sube un PDF, conversa con él y consolida lo aprendido con práctica de recuperación y repaso espaciado.">
+  <meta name="theme-color" content="#2f5d50">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Tutor">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img src="icons/icon.svg" alt="" width="28" height="28">
+      <span>Tutor</span>
+    </div>
+    <select id="docSelect" aria-label="Documento activo"></select>
+    <button id="settingsBtn" class="icon-btn" aria-label="Ajustes" title="Ajustes">⚙︎</button>
+  </header>
+
+  <main id="view" tabindex="-1"></main>
+
+  <nav class="tabs" aria-label="Secciones">
+    <button data-tab="biblioteca"><span class="ico">📚</span><span>Biblioteca</span></button>
+    <button data-tab="tutor"><span class="ico">💬</span><span>Tutor</span></button>
+    <button data-tab="feynman"><span class="ico">🧑‍🏫</span><span>Explícalo</span></button>
+    <button data-tab="preguntas"><span class="ico">❓</span><span>Preguntas</span></button>
+    <button data-tab="repaso"><span class="ico">🔁</span><span>Repaso<b id="dueBadge" class="badge" hidden></b></span></button>
+  </nav>
+
+  <dialog id="sheet">
+    <div class="sheet-head">
+      <strong id="sheetTitle"></strong>
+      <button class="icon-btn" id="sheetClose" aria-label="Cerrar">✕</button>
+    </div>
+    <div id="sheetBody" class="sheet-body"></div>
+  </dialog>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <script src="vendor/pdf.min.js"></script>
+  <script src="vendor/marked.min.js"></script>
+  <script src="vendor/purify.min.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
