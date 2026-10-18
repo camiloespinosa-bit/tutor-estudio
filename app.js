@@ -3,6 +3,7 @@ import { extractPdf, contextFor, rangeText, FULL_DOC_CHARS } from './js/docs.js'
 import { streamChat, complete, parseJSON, formatCost } from './js/llm.js';
 import { newCard, schedule, label, isDue } from './js/srs.js';
 import * as P from './js/prompts.js';
+import { renderDiagrams, checkDiagram, saveSvgAsPng } from './js/diagrams.js';
 
 // ---------- Estado ----------
 
@@ -44,10 +45,11 @@ const view = $('#view');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 function md(text) {
-  const linked = String(text || '').replace(
+  // Las citas se convierten en enlaces, salvo dentro de bloques de código (ahí rompería los diagramas).
+  const linked = String(text || '').split(/(```[\s\S]*?(?:```|$))/).map((part, i) => (i % 2 ? part : part.replace(
     /\[(?:p|pág|pag|página|pagina)\.?\s*(\d+)((?:\s*[,–-]\s*\d+)*)\]/gi,
     (_, first, rest) => `[p. ${first}${rest.replace(/\s+/g, '')}](#p${first})`,
-  );
+  ))).join('');
   const html = DOMPurify.sanitize(marked.parse(linked));
   return html.replace(/<a href="#p(\d+)">/g, '<a class="cite" href="#p$1">');
 }
@@ -71,6 +73,26 @@ function openSheet(title, html, { markdown = false } = {}) {
 }
 $('#sheetClose').onclick = () => $('#sheet').close();
 $('#sheet').addEventListener('click', (e) => { if (e.target.id === 'sheet') $('#sheet').close(); });
+
+// Botones de cada diagrama: ampliar y guardar como imagen.
+document.addEventListener('click', (e) => {
+  const zoom = e.target.closest('[data-diagram-zoom]');
+  const save = e.target.closest('[data-diagram-save]');
+  if (!zoom && !save) return;
+  const svg = e.target.closest('.diagram')?.querySelector('svg');
+  if (!svg) return;
+  if (save) {
+    saveSvgAsPng(svg, activeDoc()?.name ? `Diagrama ${activeDoc().name}` : 'diagrama').catch(() => toast('No pude guardar la imagen.'));
+    return;
+  }
+  const body = openSheet('Diagrama', '<div class="diagram-zoom"></div><p class="small muted">Desliza para recorrerlo. Gira el celular para verlo más grande.</p>');
+  body.style.whiteSpace = 'normal';
+  const copy = svg.cloneNode(true);
+  copy.removeAttribute('style');
+  const w = svg.viewBox?.baseVal?.width;
+  if (w) copy.setAttribute('width', Math.max(w, 640));
+  body.querySelector('.diagram-zoom').appendChild(copy);
+});
 
 // Al tocar una cita [p. N] se muestra el texto de esa página.
 document.addEventListener('click', (e) => {
@@ -237,7 +259,7 @@ const CHAT_INFO = {
     title: 'Tutor',
     intro: 'Pregúntale lo que no entiendas. Responde con base en tu PDF y cita las páginas.',
     placeholder: 'Ej.: ¿Qué diferencia hay entre memoria de trabajo y memoria a corto plazo?',
-    chips: ['Explícamelo más simple', 'Dame un ejemplo de la vida diaria', 'Hazme una pregunta para ver si entendí', '¿Cómo se conecta esto con lo anterior?', 'Resume este documento en 5 ideas clave'],
+    chips: ['Explícamelo más simple', 'Hazme un diagrama de este tema', 'Dame un ejemplo de la vida diaria', 'Hazme una pregunta para ver si entendí', '¿Cómo se conecta esto con lo anterior?', 'Resume este documento en 5 ideas clave'],
     system: P.tutorSystem,
   },
   feynman: {
@@ -270,11 +292,15 @@ async function renderChat(mode) {
     </div>`;
 
   const list = $('#chat');
+  const askFix = (error) => send(P.fixDiagramPrompt(error));
   const addBubble = (m) => {
     const div = document.createElement('div');
     div.className = `msg ${m.role}${m.error ? ' error' : ''}`;
     if (m.role === 'user') div.textContent = m.content;
-    else div.innerHTML = `<div class="md">${md(m.content)}</div>${m.meta ? `<div class="meta">${esc(m.meta)}</div>` : ''}`;
+    else {
+      div.innerHTML = `<div class="md">${md(m.content)}</div>${m.meta ? `<div class="meta">${esc(m.meta)}</div>` : ''}`;
+      if (m.content) renderDiagrams(div, { onFix: askFix });
+    }
     list.appendChild(div);
     return div;
   };
@@ -313,11 +339,12 @@ async function renderChat(mode) {
         apiKey: state.settings.apiKey, model, messages, signal: state.abort.signal,
         onDelta: (t) => {
           const now = performance.now();
-          if (now - lastPaint > 60) { content.innerHTML = md(t); lastPaint = now; }
+          if (now - lastPaint > 60) { content.innerHTML = md(t); renderDiagrams(content, { pending: true }); lastPaint = now; }
         },
       });
       content.classList.remove('typing');
       content.innerHTML = md(answer);
+      renderDiagrams(content, { onFix: askFix });
       const meta = [formatCost(usage), ctx.full ? '' : `leyó las páginas ${ctx.pages.map((i) => i + 1).join(', ')}`].filter(Boolean).join(' · ');
       if (meta) bubble.insertAdjacentHTML('beforeend', `<div class="meta">${esc(meta)}</div>`);
       chat.messages.push({ role: 'assistant', content: answer, meta });
@@ -376,11 +403,23 @@ async function renderQuestions() {
   const doc = activeDoc();
   if (state.quiz && state.quiz.docId === doc.id) return renderQuiz();
   if (state.gen && state.gen.docId === doc.id) return renderGenerated();
+  if (state.map && state.map.docId === doc.id) return renderMap();
+  const saved = (await db.get('chats', `${doc.id}:maps`))?.maps || [];
 
   view.innerHTML = `
     ${needKeyNotice()}
-    <h1>Preguntas y tarjetas</h1>
+    <h1>Practicar</h1>
     <p class="muted small">Responder sin mirar el texto cuesta más que releer, y por eso funciona: ese esfuerzo de recordar es lo que fija la información.</p>
+    <div class="card stack">
+      <h2 style="margin-top:0">Mapa del tema</h2>
+      <p class="small muted">Un mapa conceptual de las páginas que elijas: los conceptos centrales y cómo se relacionan.</p>
+      ${rangeControls(doc, 'm')}
+      <button class="btn-primary" id="startMap">Crear mapa</button>
+      ${saved.length ? `<div class="stack">${saved.map((m, i) => `
+        <div class="row small"><span class="grow">🗺️ ${esc(m.title)} <span class="muted">(p. ${m.from}–${m.to})</span></span>
+          <button class="small" data-open-map="${i}">Ver</button>
+          <button class="icon-btn btn-danger" data-del-map="${i}" aria-label="Eliminar mapa" title="Eliminar">🗑</button></div>`).join('')}</div>` : ''}
+    </div>
     <div class="card stack">
       <h2 style="margin-top:0">Practicar con preguntas</h2>
       <p class="small muted">Respondes por escrito y el Tutor te corrige con base en el PDF.</p>
@@ -397,6 +436,16 @@ async function renderQuestions() {
     </div>
     <div id="genStatus" class="small muted"></div>`;
 
+  $('#startMap').onclick = () => generateMap();
+  view.querySelectorAll('[data-open-map]').forEach((b) => { b.onclick = () => { state.map = { ...saved[b.dataset.openMap], docId: doc.id, saved: true }; renderMap(); }; });
+  view.querySelectorAll('[data-del-map]').forEach((b) => {
+    b.onclick = async () => {
+      if (!confirm('¿Eliminar este mapa?')) return;
+      saved.splice(Number(b.dataset.delMap), 1);
+      await db.put('chats', { id: `${doc.id}:maps`, docId: doc.id, mode: 'maps', maps: saved });
+      renderQuestions();
+    };
+  });
   $('#startQuiz').onclick = () => generate('quiz');
   $('#startCards').onclick = () => generate('cards');
 }
@@ -439,6 +488,74 @@ async function generate(kind) {
     state.busy = false;
     renderQuestions();
   }
+}
+
+async function generateMap() {
+  if (state.busy) return;
+  const doc = activeDoc();
+  const { from, to } = readRange('m', doc);
+  const range = rangeText(doc, from, to);
+  if (!range.text.trim()) return toast('Esas páginas no tienen texto legible.');
+  if (range.truncated) toast(`Es mucho texto: usaré de la página ${from} a la ${range.lastPage}.`);
+
+  state.busy = true;
+  view.querySelectorAll('button').forEach((b) => { b.disabled = true; });
+  $('#genStatus').innerHTML = '<span class="typing">Dibujando el mapa</span>';
+  const model = state.settings.genModel;
+  const messages = [
+    P.systemMessage(model, 'Eres un experto en organizar conocimiento para estudiar. Responde siempre en español.', range.text, false),
+    { role: 'user', content: P.mapPrompt() },
+  ];
+  try {
+    let text = '';
+    // Si el diagrama sale con errores de sintaxis, se le pide una vez al modelo que lo corrija.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      ({ text } = await complete({ apiKey: state.settings.apiKey, model, messages }));
+      const code = text.match(/```mermaid\s*([\s\S]*?)```/)?.[1];
+      const error = code ? await checkDiagram(code.trim()) : 'No incluiste un bloque mermaid.';
+      if (!error) break;
+      if (attempt === 1) throw new Error('El modelo no logró dibujar un mapa válido. Intenta con menos páginas.');
+      messages.push({ role: 'assistant', content: text }, { role: 'user', content: P.fixDiagramPrompt(error) });
+    }
+    const title = text.match(/T[ÍI]TULO:\s*(.+)/i)?.[1]?.replace(/[*_#]/g, '').trim() || `Páginas ${from} a ${range.lastPage}`;
+    state.map = { docId: doc.id, title, text: text.replace(/^.*T[ÍI]TULO:.*$/im, '').trim(), from, to: range.lastPage, createdAt: Date.now() };
+  } catch (err) {
+    console.error(err);
+    toast(err.message);
+  } finally {
+    state.busy = false;
+    renderQuestions();
+  }
+}
+
+function renderMap() {
+  const m = state.map;
+  view.innerHTML = `
+    <div class="row"><h1 class="grow">${esc(m.title)}</h1><button class="btn-ghost small" id="exitMap">Volver</button></div>
+    <p class="small muted">Páginas ${m.from} a ${m.to}</p>
+    <div class="card md" id="mapBody">${md(m.text)}</div>
+    <div class="row">
+      ${m.saved ? '' : '<button class="btn-primary" id="saveMap">Guardar en mis mapas</button>'}
+      <button id="quizMap">Modo reto: ocultar relaciones</button>
+    </div>
+    <p class="small muted">Para recordar más: oculta las relaciones e intenta decir en voz alta cómo se conecta cada concepto antes de volver a mostrarlas. Mirar el mapa ayuda a entender; recordarlo sin mirar es lo que fija la información.</p>`;
+  const body = $('#mapBody');
+  renderDiagrams(body);
+  $('#exitMap').onclick = () => { state.map = null; renderQuestions(); };
+  $('#quizMap').onclick = (e) => {
+    const on = body.classList.toggle('hide-relations');
+    e.target.textContent = on ? 'Mostrar relaciones' : 'Modo reto: ocultar relaciones';
+  };
+  const save = $('#saveMap');
+  if (save) save.onclick = async () => {
+    const id = `${m.docId}:maps`;
+    const rec = (await db.get('chats', id)) || { id, docId: m.docId, mode: 'maps', maps: [] };
+    rec.maps.unshift({ title: m.title, text: m.text, from: m.from, to: m.to, createdAt: m.createdAt });
+    await db.put('chats', rec);
+    m.saved = true;
+    toast('Mapa guardado.');
+    renderMap();
+  };
 }
 
 function renderQuiz() {

@@ -11,7 +11,9 @@ Funciona en el computador y en el celular (se instala como app desde el navegado
 | **Biblioteca** | Subir PDFs. El texto se extrae en tu dispositivo. | |
 | **Tutor** | Preguntar lo que no entiendes. Responde con base en el PDF y cita la página; tocar la cita muestra el texto original. | |
 | **Explícalo** | Explicas un tema con tus palabras y el Tutor te dice qué está bien y qué falta. | Técnica Feynman / autoexplicación |
-| **Preguntas** | Preguntas abiertas que respondes sin mirar; el Tutor corrige contra el PDF. Las falladas se guardan como tarjetas. | Práctica de recuperación (Roediger y Karpicke, 2006) |
+| **Diagramas** | El Tutor dibuja diagramas (procesos, clasificaciones, relaciones) cuando ayudan o cuando se los pides. Se pueden ampliar y guardar como imagen. | |
+| **Practicar → Mapa del tema** | Mapa conceptual de las páginas que elijas, con "modo reto" que oculta las relaciones para que las recuerdes. | Mapas conceptuales (Nesbit y Adesope, 2006) combinados con recuperación |
+| **Practicar → Preguntas** | Preguntas abiertas que respondes sin mirar; el Tutor corrige contra el PDF. Las falladas se guardan como tarjetas. | Práctica de recuperación (Roediger y Karpicke, 2006) |
 | **Repaso** | Tarjetas que vuelven en intervalos crecientes según qué tan bien las recordaste. | Práctica espaciada (Cepeda et al., 2006); algoritmo tipo SM-2 |
 
 Dunlosky et al. (2013, *Psychological Science in the Public Interest*) calificaron la práctica de recuperación y la práctica espaciada como las técnicas de estudio de mayor utilidad entre las diez que revisaron.
@@ -58,8 +60,9 @@ js/docs.js      lectura de PDF y selección de páginas
 js/llm.js       conexión con OpenRouter
 js/prompts.js   instrucciones del Tutor (edítalas para ajustar su estilo)
 js/srs.js       algoritmo de repaso espaciado
+js/diagrams.js  dibujo de diagramas y descarga como imagen
 sw.js           funcionamiento sin conexión
-vendor/         pdf.js 3.11.174, marked 12.0.2, DOMPurify 3.1.6 (con sus licencias)
+vendor/         pdf.js 3.11.174, marked 12.0.2, DOMPurify 3.1.6, mermaid 10.9.1 (con sus licencias)
 ```
 
 Para probarla en local: `python3 -m http.server` dentro de la carpeta y abre http://localhost:8000.

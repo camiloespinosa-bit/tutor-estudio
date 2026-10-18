@@ -1,10 +1,11 @@
 // Guarda la app en el dispositivo para que abra rápido y sin conexión.
 // Las llamadas a la IA (openrouter.ai) nunca se guardan en caché.
-const VERSION = 'tutor-v1';
+const VERSION = 'tutor-v2';
 const SHELL = [
   './', 'index.html', 'styles.css', 'app.js', 'manifest.webmanifest',
   'js/db.js', 'js/docs.js', 'js/llm.js', 'js/prompts.js', 'js/srs.js',
-  'vendor/pdf.min.js', 'vendor/pdf.worker.min.js', 'vendor/marked.min.js', 'vendor/purify.min.js',
+  'vendor/pdf.min.js', 'vendor/pdf.worker.min.js', 'vendor/marked.min.js', 'vendor/purify.min.js', 'vendor/mermaid.min.js',
+  'js/diagrams.js',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-180.png',
 ];
 

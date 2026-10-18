@@ -4,6 +4,15 @@ const COMMON = `Responde siempre en español.
 Usa solo información del documento y cita la página así: [p. 12]. Cada afirmación importante lleva su cita.
 Si algo no está en el documento, dilo claramente. Si aportas conocimiento general, márcalo con "Fuera del documento:". Nunca inventes citas, autores, cifras ni referencias.`;
 
+export const DIAGRAM_RULES = `Diagramas: cuando un tema tenga pasos, causas, clasificaciones o conceptos relacionados (o cuando el estudiante lo pida), incluye UN diagrama en un bloque \`\`\`mermaid. Reglas de sintaxis, síguelas al pie de la letra:
+- Empieza con "flowchart TD" (procesos y causas) o "flowchart LR" (mapas de conceptos).
+- Cada nodo con id corto sin espacios ni tildes y etiqueta entre comillas: MT["Memoria de trabajo"]
+- Relaciones con etiqueta corta entre comillas: MT -->|"forma parte de"| MCP
+- Etiquetas de máximo 6 palabras. Dentro de las etiquetas no uses comillas, corchetes, paréntesis, llaves ni el signo #.
+- Máximo 15 nodos. Puedes agrupar con: subgraph G1["Título"] ... end
+- No pongas citas [p. N] dentro del diagrama; cítalas en el texto que lo acompaña.
+- Explica el diagrama en 2 o 3 frases.`;
+
 function partialNote(ctx) {
   return ctx.full ? '' : `\nSolo tienes algunas páginas del documento (las más relacionadas con la conversación). Si la respuesta podría estar en otras páginas, dilo.`;
 }
@@ -19,7 +28,8 @@ Cómo explicas:
 - Usa una analogía o un ejemplo concreto de la vida diaria cuando ayude a entender.
 - Respuestas breves por defecto (unas 250 palabras como máximo), salvo que el estudiante pida más detalle.
 - Si el estudiante parece confundido, cambia de enfoque en vez de repetir lo mismo con otras palabras.
-- Al final, cuando tenga sentido, haz UNA pregunta corta para que el estudiante compruebe si entendió. No des la respuesta de esa pregunta: espera a que él responda y luego dale retroalimentación.`;
+- ${DIAGRAM_RULES}
+- Al final, cuando tenga sentido, haz UNA pregunta corta para que el estudiante compruebe si entendió. No des la respuesta de esa pregunta: espera su respuesta y luego dale retroalimentación.`;
 }
 
 export function feynmanSystem(doc, profile, ctx) {
@@ -71,6 +81,27 @@ Reglas:
 - No incluyas nada que no esté en el texto.
 Devuelve SOLO un JSON con esta forma, sin texto adicional:
 [{"frente": "...", "reverso": "...", "pagina": 12}]`;
+}
+
+export function mapPrompt() {
+  return `Crea un mapa conceptual del texto del documento: los conceptos centrales y cómo se relacionan.
+Responde exactamente con este formato:
+TÍTULO: (título corto del tema)
+
+\`\`\`mermaid
+flowchart LR
+  ...
+\`\`\`
+
+**Cómo leer este mapa:** 3 a 5 viñetas cortas que expliquen las relaciones más importantes, con citas [p. N].
+
+${DIAGRAM_RULES}
+En este caso usa "flowchart LR", entre 8 y 15 nodos, y pon una etiqueta en cada relación (por ejemplo "es un tipo de", "causa", "se opone a", "permite").`;
+}
+
+export function fixDiagramPrompt(error) {
+  return `El diagrama que escribiste tiene un error de sintaxis de Mermaid: ${error}
+Vuelve a escribir la respuesta completa con el diagrama corregido, siguiendo estrictamente las reglas de sintaxis.`;
 }
 
 // Arma el mensaje de sistema. Con modelos de Anthropic se marca el documento para la caché de prompts,
